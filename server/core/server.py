@@ -155,6 +155,9 @@ async def auth():
 async def send_message(request: SendMessageRequest):
     """HTTP endpoint to send a chat message"""
     try:
+        if request.user_id not in active_websockets:
+            raise HTTPException(status_code=403, detail="Invalid user ID. Provide authenticated user id.")
+
         chat_message = ChatMessage(
             user_id=request.user_id,
             message=request.message,
@@ -169,7 +172,10 @@ async def send_message(request: SendMessageRequest):
             "message": "Message sent successfully",
             "timestamp": chat_message.timestamp
         }
-        
+    
+    except HTTPException as http_exc:
+        logger.error(f"HTTP error: {http_exc.detail}")
+        raise http_exc
     except Exception as e:
         logger.error(f"Error sending message: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to send message: {str(e)}")
