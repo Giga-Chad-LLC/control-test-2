@@ -2,6 +2,10 @@
 
 A real-time chat application built with RabbitMQ message broker, using FastAPI and React client.
 
+Watch the application in action:
+
+![Video Demo](./assets/demo.mp4)
+
 ## Overview
 
 Project implements a chat system with RabbitMQ for message exchange. Users can join different chat rooms, send messages, and receive real-time updates via WebSocket connections.
