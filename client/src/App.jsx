@@ -45,7 +45,7 @@ function App() {
   };
 
   // Listen messages
-  const listenMessagesFromRoom = (userId) => {
+  const listenMessagesFromRoom = (userId, newRoom) => {
     // clear messages
     setMessages([]);
 
@@ -55,8 +55,7 @@ function App() {
         previousWs.close();
       }
 
-      // TODO: install room
-      const ws = new WebSocket(`${config.WS_URL}/chat/${userId}`);
+      const ws = new WebSocket(`${config.WS_URL}/chat/${userId}?room=${newRoom}`);
       // Handle incoming messages
       ws.onmessage = (event) => {
         setMessages([...messages, JSON.parse(event.data)]);
@@ -83,13 +82,15 @@ function App() {
       return;
     }
 
-    axios.post(`${config.API_URL}/change_room`, {
-      room: roomInput,
-    })
-      .then((res) => {
-        console.log(res.data);
-        setRoom(res.data.room);
-      });
+    setRoom(roomInput);
+    listenMessagesFromRoom(userId, roomInput);
+    // axios.post(`${config.API_URL}/change_room`, {
+    //   room: roomInput,
+    // })
+    //   .then((res) => {
+    //     console.log(res.data);
+    //     setRoom(res.data.room);
+    //   });
   };
 
 
@@ -97,7 +98,7 @@ function App() {
   useEffect(() => {
     authenticate().then((userId) => {
       console.log(`Successfully authenticated: received user id ${userId}`);
-      listenMessagesFromRoom(userId);
+      listenMessagesFromRoom(userId, room);
     });
   }, []);
 

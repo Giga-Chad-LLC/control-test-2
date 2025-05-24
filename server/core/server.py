@@ -201,6 +201,8 @@ async def websocket_chat_endpoint(websocket: WebSocket, user_id: str, room: str 
             return
 
         room = websocket.query_params.get("room", "general")
+        if len(room) == 0:
+            room = "general"
         
         active_websockets[user_id] = websocket
         user_rooms[user_id] = room
@@ -261,25 +263,19 @@ async def websocket_chat_endpoint(websocket: WebSocket, user_id: str, room: str 
     except Exception as e:
         logger.error(f"WebSocket error for user id {user_id}: {e}")
     finally:
-        logger.info(f"User id {user_id}: active_websockets " + str(active_websockets))
-        logger.info(f"User id {user_id}: user_rooms " + str(user_rooms))
         # Cleanup
         if user_id in active_websockets:
-            # await active_websockets[user_id].close()
-            del active_websockets[user_id]
+            active_websockets[user_id] = None
         if user_id in user_rooms:
-            del user_rooms[user_id]
-        logger.info(f"AFTER User id {user_id}: active_websockets " + str(active_websockets))
-        logger.info(f"AFTER User id {user_id}: user_rooms " + str(user_rooms))
+            user_rooms[user_id] = None
         
         logger.info(f"Cleaned up WebSocket connection: for user id {user_id}")
 
 @app.get("/rooms")
 async def list_rooms():
     """List active chat rooms"""
-    rooms = set(user_rooms.values())
     return {
-        "active_rooms": list(rooms),
+        "active_rooms": dict(user_rooms),
         "total_connections": len(active_websockets)
     }
 
