@@ -4,7 +4,7 @@ A real-time chat application built with RabbitMQ message broker, using FastAPI a
 
 Watch the application in action:
 
-![Video Demo](./assets/demo.mp4)
+![Video Demo](./assets/demo.gif)
 
 ## Overview
 
