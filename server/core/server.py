@@ -33,6 +33,7 @@ rabbitmq_connection = None
 rabbitmq_channel = None
 active_websockets: Dict[str, WebSocket] = {}
 user_rooms: Dict[str, str] = {}  # websocket_id -> room
+rooms_websockets: Dict[str, Set[str]] = {}  # room -> set of websocket_ids
 
 # RabbitMQ configuration
 RABBITMQ_URL = "amqp://guest:guest@localhost:5672/"
@@ -84,15 +85,14 @@ async def publish_message(message: ChatMessage):
             message.timestamp = datetime.now().isoformat()
             
         message_body = message.model_dump_json()
-        routing_key = f"chat.{message.room}"
         
-        await rabbitmq_channel.default_exchange.publish(
+        exchange = await rabbitmq_channel.get_exchange(CHAT_EXCHANGE)
+        await exchange.publish(
             Message(
                 message_body.encode(),
                 headers={"room": message.room, "user_id": message.user_id}
             ),
-            # routing_key=f"chat_queue_{message.room}"
-            routing_key=routing_key
+            routing_key=f"chat.{message.room}"
         )
         
         logger.info(f"Published message to room {message.room} from user {message.user_id}")
@@ -105,11 +105,11 @@ async def setup_message_consumer(room: str, websocket_id: str):
     """Set up message consumer for a specific room"""
     try:
         # Declare queue for the room
-        queue_name = f"chat_queue_{room}"
         queue = await rabbitmq_channel.declare_queue(
-            queue_name, 
-            durable=True,
-            auto_delete=False
+            name="", 
+            durable=False,
+            exclusive=True,
+            auto_delete=True
         )
         
         # Bind queue to exchange
@@ -175,6 +175,10 @@ async def websocket_chat_endpoint(websocket: WebSocket, user_id: str, room: str 
     await websocket.accept()
     active_websockets[websocket_id] = websocket
     user_rooms[websocket_id] = room
+
+    if room not in rooms_websockets:
+        rooms_websockets[room] = set()
+    rooms_websockets[room].add(websocket_id)
     
     logger.info(f"WebSocket connected: {websocket_id} for user {user_id} in room {room}")
     
