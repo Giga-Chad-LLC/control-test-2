@@ -1,0 +1,54 @@
+# Node.js / React related
+node_modules/
+build/
+dist/
+*.log
+.vscode/
+.DS_Store
+.env
+.env.local
+package-lock.json
+yarn.lock
+
+# Python related
+venv/
+__pycache__/
+*.py[cod]
+*.sqlite3
+*.pyo
+*.pyd
+*.egg-info/
+instance/
+*.log
+*.pot
+*.pyc
+.Python
+db.sqlite3
+pip-log.txt
+coverage.xml
+
+# General
+*.swp
+.idea/
+*.bak
+*.tmp
+*.old
+
+# MacOS specific
+.DS_Store
+.Trashes
+
+# Byte-compiled Python modules
+*.pyc
+
+# Test and coverage results
+htmlcov/
+.tox/
+.coverage
+.cache/
+.nox/
+
+# IDE-specific files
+.vscode/
+.idea/
+*.iml
