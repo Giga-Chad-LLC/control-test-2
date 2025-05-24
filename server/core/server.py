@@ -32,8 +32,7 @@ class SendMessageRequest(BaseModel):
 rabbitmq_connection = None
 rabbitmq_channel = None
 active_websockets: Dict[str, WebSocket] = {}
-user_rooms: Dict[str, str] = {}  # websocket_id -> room
-rooms_websockets: Dict[str, Set[str]] = {}  # room -> set of websocket_ids
+user_rooms: Dict[str, str] = {}  # user_id -> room
 
 # RabbitMQ configuration
 RABBITMQ_URL = "amqp://guest:guest@localhost:5672/"
@@ -101,7 +100,7 @@ async def publish_message(message: ChatMessage):
         logger.error(f"Error publishing message: {e}")
         raise
 
-async def setup_message_consumer(room: str, websocket_id: str):
+async def setup_message_consumer(room: str, user_id: str):
     """Set up message consumer for a specific room"""
     try:
         # Declare queue for the room
@@ -124,10 +123,10 @@ async def setup_message_consumer(room: str, websocket_id: str):
                     message_data = json.loads(message.body.decode())
                     
                     # Send to WebSocket if connection is still active
-                    if websocket_id in active_websockets:
-                        websocket = active_websockets[websocket_id]
+                    if user_id in active_websockets:
+                        websocket = active_websockets[user_id]
                         await websocket.send_text(json.dumps(message_data))
-                        logger.info(f"Sent message to WebSocket {websocket_id}")
+                        logger.info(f"Sent message to WebSocket for user id {user_id}")
                     
                 except Exception as e:
                     logger.error(f"Error processing message: {e}")
@@ -143,6 +142,14 @@ async def setup_message_consumer(room: str, websocket_id: str):
 @app.get("/")
 async def root():
     return {"message": "RabbitMQ Chat Server is running"}
+
+@app.get("/auth")
+async def auth():
+    """Generate a unique ID for the client"""
+    unique_id = str(uuid.uuid4())
+    active_websockets[unique_id] = None  # Placeholder for WebSocket connection
+    user_rooms[unique_id] = None  # No room entered
+    return {"id": unique_id}
 
 @app.post("/send_message")
 async def send_message(request: SendMessageRequest):
@@ -170,23 +177,27 @@ async def send_message(request: SendMessageRequest):
 @app.websocket("/chat/{user_id}")
 async def websocket_chat_endpoint(websocket: WebSocket, user_id: str, room: str = "general"):
     """WebSocket endpoint for real-time chat"""
-    websocket_id = str(uuid.uuid4())
-
-    room = websocket.query_params.get("room", "general")
-    
-    await websocket.accept()
-    active_websockets[websocket_id] = websocket
-    user_rooms[websocket_id] = room
-
-    if room not in rooms_websockets:
-        rooms_websockets[room] = set()
-    rooms_websockets[room].add(websocket_id)
-    
-    logger.info(f"WebSocket connected: {websocket_id} for user {user_id} in room {room}")
-    
     try:
+        await websocket.accept()
+
+        if user_id not in active_websockets:
+            await websocket.send_text(json.dumps({
+                "type": "error",
+                "message": "Invalid user ID. Please authenticate first."
+            }))
+            await websocket.close()
+            logger.error(f"WebSocket connection attempt with unknown user ID: {user_id}")
+            return
+
+        room = websocket.query_params.get("room", "general")
+        
+        active_websockets[user_id] = websocket
+        user_rooms[user_id] = room
+        
+        logger.info(f"WebSocket connected: user {user_id} in room {room}")
+    
         # Setup message consumer for this room
-        await setup_message_consumer(room, websocket_id)
+        await setup_message_consumer(room, user_id)
         
         # Send welcome message
         welcome_message = {
@@ -233,17 +244,17 @@ async def websocket_chat_endpoint(websocket: WebSocket, user_id: str, room: str 
                 await websocket.send_text(json.dumps(error_msg))
                 
     except WebSocketDisconnect:
-        logger.info(f"WebSocket disconnected: {websocket_id}")
+        logger.info(f"WebSocket disconnected: with user id {user_id}")
     except Exception as e:
-        logger.error(f"WebSocket error for {websocket_id}: {e}")
+        logger.error(f"WebSocket error for user id {user_id}: {e}")
     finally:
         # Cleanup
-        if websocket_id in active_websockets:
-            del active_websockets[websocket_id]
-        if websocket_id in user_rooms:
-            del user_rooms[websocket_id]
+        if user_id in active_websockets:
+            active_websockets[user_id] = None
+        if user_id in user_rooms:
+            user_rooms[user_id] = None
         
-        logger.info(f"Cleaned up WebSocket connection: {websocket_id}")
+        logger.info(f"Cleaned up WebSocket connection: for user id {user_id}")
 
 @app.get("/rooms")
 async def list_rooms():
