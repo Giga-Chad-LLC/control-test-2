@@ -48,3 +48,8 @@
 .room-block {
   margin-bottom: 20px;
 }
+
+.message-user-id {
+  font-weight: bold;
+  font-size: 12px;
+}

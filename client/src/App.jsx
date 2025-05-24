@@ -1,6 +1,4 @@
-import { useState, useEffect } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
+import { useState, useEffect, useRef } from 'react'
 import './App.css'
 import config from './config/config';
 import axios from 'axios';
@@ -12,7 +10,7 @@ function App() {
   const [room, setRoom] = useState('general');
   const [roomInput, setRoomInput] = useState('');
 
-  const [messageListeningWebSocket, setMessageListeningWebSocket] = useState(null);
+  const wsRef = useRef(null);
 
   // Authenticate user
   const authenticate = async () => {
@@ -34,6 +32,7 @@ function App() {
     console.log("Sending message", message);
 
     axios.post(`${config.API_URL}/send_message`, {
+      user_id: userId,
       message: message,
       room: room,
     })
@@ -41,34 +40,6 @@ function App() {
         console.log(res);
         setMessage('');
       });
-
-  };
-
-  // Listen messages
-  const listenMessagesFromRoom = (userId, newRoom) => {
-    // clear messages
-    setMessages([]);
-
-    setMessageListeningWebSocket(previousWs => {
-      // close previous websocket
-      if (previousWs) {
-        previousWs.close();
-      }
-
-      const ws = new WebSocket(`${config.WS_URL}/chat/${userId}?room=${newRoom}`);
-      // Handle incoming messages
-      ws.onmessage = (event) => {
-        setMessages([...messages, JSON.parse(event.data)]);
-      };
-      ws.onclose = () => {
-        console.log("WebSocket closed");
-      }
-      ws.onerror = (error) => {
-        console.error("WebSocket error:", error);
-      };
-
-      return ws;
-    });
   };
 
   // Change room
@@ -83,31 +54,53 @@ function App() {
     }
 
     setRoom(roomInput);
-    listenMessagesFromRoom(userId, roomInput);
-    // axios.post(`${config.API_URL}/change_room`, {
-    //   room: roomInput,
-    // })
-    //   .then((res) => {
-    //     console.log(res.data);
-    //     setRoom(res.data.room);
-    //   });
   };
 
+   // Connect to WebSocket when userId or room changes
+   useEffect(() => {
+    if (!userId) return;
 
-  // connect and listen messages
-  useEffect(() => {
-    authenticate().then((userId) => {
-      console.log(`Successfully authenticated: received user id ${userId}`);
-      listenMessagesFromRoom(userId, room);
-    });
-  }, []);
+    // Clear messages on room change
+    setMessages([]);
 
+    // If an existing WebSocket exists, close it first
+    if (wsRef.current) {
+      wsRef.current.onmessage = null;
+      wsRef.current.onerror = null;
+      wsRef.current.onclose = null;
+      wsRef.current.close();
+    }
 
-  // useEffect(() => {
-  //   if (userId) {
-  //     listenMessagesFromRoom(userId);
-  //   }
-  // }, [room, userId]);
+    // Create new WebSocket connection
+    const ws = new WebSocket(`${config.WS_URL}/chat/${userId}?room=${room}`);
+
+    ws.onmessage = (event) => {
+      console.log("Received message:", event.data);
+      setMessages(prev => [...prev, JSON.parse(event.data)]);
+    };
+
+    ws.onclose = () => {
+      console.log("WebSocket closed");
+    };
+
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+      alert("Failed to connect to the chat room. Please try again later.");
+    };
+
+    wsRef.current = ws;
+
+    // Cleanup when component unmounts or before next effect run
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.onmessage = null;
+        wsRef.current.onerror = null;
+        wsRef.current.onclose = null;
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+  }, [userId, room]);
 
 
   return (
@@ -116,7 +109,11 @@ function App() {
         <h1>RabbitMQ Chat</h1>
 
         <div className="chat-buttons">
-          {(userId == null) ? (<button onClick={authenticate}>Authenticate</button>) : null}
+          {(userId == null) ? (<button onClick={() => {
+            authenticate().then((userId) => {
+              console.log(`Successfully authenticated: received user id ${userId}`);
+            });
+          }}>Authenticate</button>) : null}
           <div>User id: {userId}</div>
 
           <div className="room-block">
@@ -137,7 +134,10 @@ function App() {
             { messages.length == 0 ? (<div className="messages-empty">No messages yet</div>) : null }
 
             {messages.map((message, i) => (
-              <div className="message-block" key={i}>{message.content}</div>
+              <div className="message-block" key={i}>
+                <p className='message-user-id'>From: {message.user_id}</p>
+                {message.message}
+              </div>
             ))}
           </div>
         </div>
