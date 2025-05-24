@@ -139,10 +139,6 @@ async def setup_message_consumer(room: str, user_id: str):
         logger.error(f"Error setting up consumer for room {room}: {e}")
         raise
 
-@app.get("/")
-async def root():
-    return {"message": "RabbitMQ Chat Server is running"}
-
 @app.get("/auth")
 async def auth():
     """Generate a unique ID for the client"""
@@ -269,18 +265,6 @@ async def list_rooms():
     return {
         "active_rooms": list(rooms),
         "total_connections": len(active_websockets)
-    }
-
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    rabbitmq_status = "connected" if rabbitmq_connection and not rabbitmq_connection.is_closed else "disconnected"
-    
-    return {
-        "status": "healthy",
-        "rabbitmq": rabbitmq_status,
-        "active_connections": len(active_websockets),
-        "timestamp": datetime.now().isoformat()
     }
 
 # For running the server directly
