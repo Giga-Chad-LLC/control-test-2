@@ -8,19 +8,19 @@ import axios from 'axios';
 function App() {
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState([]);
-  const [connectionId, setConnectionId] = useState(null);
+  const [userId, setUserId] = useState(null);
   const [room, setRoom] = useState('general');
   const [roomInput, setRoomInput] = useState('');
 
   const [messageListeningWebSocket, setMessageListeningWebSocket] = useState(null);
 
-  // Connect
-  const connect = async () => {
-    return axios.get(`${config.API_URL}/connect`)
+  // Authenticate user
+  const authenticate = async () => {
+    return axios.get(`${config.API_URL}/auth`)
       .then((res) => {
         console.log(res.data);
-        setConnectionId(res.data.connection_id);
-        return res.data.connection_id;
+        setUserId(res.data.user_id);
+        return res.data.user_id;
       });
   };
 
@@ -45,7 +45,7 @@ function App() {
   };
 
   // Listen messages
-  const listenMessagesFromRoom = (connectionId) => {
+  const listenMessagesFromRoom = (userId) => {
     // clear messages
     setMessages([]);
 
@@ -56,10 +56,16 @@ function App() {
       }
 
       // TODO: install room
-      const ws = new WebSocket(`${config.WS_URL}/chat/${connectionId}`);
+      const ws = new WebSocket(`${config.WS_URL}/chat/${userId}`);
       // Handle incoming messages
       ws.onmessage = (event) => {
         setMessages([...messages, JSON.parse(event.data)]);
+      };
+      ws.onclose = () => {
+        console.log("WebSocket closed");
+      }
+      ws.onerror = (error) => {
+        console.error("WebSocket error:", error);
       };
 
       return ws;
@@ -89,18 +95,18 @@ function App() {
 
   // connect and listen messages
   useEffect(() => {
-    connect().then((connectionId) => {
-      console.log(`Successfully connected: received connection id ${connectionId}`);
-      listenMessagesFromRoom(connectionId);
+    authenticate().then((userId) => {
+      console.log(`Successfully authenticated: received user id ${userId}`);
+      listenMessagesFromRoom(userId);
     });
   }, []);
 
 
-  useEffect(() => {
-    if (connectionId) {
-      listenMessagesFromRoom(connectionId);
-    }
-  }, [room, connectionId]);
+  // useEffect(() => {
+  //   if (userId) {
+  //     listenMessagesFromRoom(userId);
+  //   }
+  // }, [room, userId]);
 
 
   return (
@@ -109,7 +115,8 @@ function App() {
         <h1>RabbitMQ Chat</h1>
 
         <div className="chat-buttons">
-          {(connectionId == null) ? (<button onClick={connect}>Connect</button>) : null}
+          {(userId == null) ? (<button onClick={authenticate}>Authenticate</button>) : null}
+          <div>User id: {userId}</div>
 
           <div className="room-block">
             <p>Current room: <i><b>{room}</b></i></p>
@@ -118,8 +125,8 @@ function App() {
           </div>
 
           <div className="send-block">
-            <input disabled={!connectionId} type="text" placeholder="Message" value={message} onChange={(e) => setMessage(e.target.value)} />
-            <button disabled={!connectionId} onClick={sendMessage}>Send</button>
+            <input disabled={!userId} type="text" placeholder="Message" value={message} onChange={(e) => setMessage(e.target.value)} />
+            <button disabled={!userId} onClick={sendMessage}>Send</button>
           </div>
         </div>
 
@@ -128,8 +135,8 @@ function App() {
           <div className="messages-container">
             { messages.length == 0 ? (<div className="messages-empty">No messages yet</div>) : null }
 
-            {messages.map((message) => (
-              <div className="message-block" key={message.id}>{message.content}</div>
+            {messages.map((message, i) => (
+              <div className="message-block" key={i}>{message.content}</div>
             ))}
           </div>
         </div>

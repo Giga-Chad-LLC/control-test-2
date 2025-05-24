@@ -8,6 +8,7 @@ import uuid
 import aio_pika
 from aio_pika import Message, connect_robust
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # Configure logging
@@ -15,6 +16,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="RabbitMQ Chat Server", version="1.0.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all HTTP methods (GET, POST, etc.)
+    allow_headers=["*"],  # Allow all headers
+)
+
 
 # Pydantic models
 class ChatMessage(BaseModel):
@@ -142,10 +151,10 @@ async def setup_message_consumer(room: str, user_id: str):
 @app.get("/auth")
 async def auth():
     """Generate a unique ID for the client"""
-    unique_id = str(uuid.uuid4())
-    active_websockets[unique_id] = None  # Placeholder for WebSocket connection
-    user_rooms[unique_id] = None  # No room entered
-    return {"id": unique_id}
+    user_id = str(uuid.uuid4())
+    active_websockets[user_id] = None  # Placeholder for WebSocket connection
+    user_rooms[user_id] = None  # No room entered
+    return {"user_id": user_id}
 
 @app.post("/send_message")
 async def send_message(request: SendMessageRequest):
@@ -240,6 +249,8 @@ async def websocket_chat_endpoint(websocket: WebSocket, user_id: str, room: str 
             except json.JSONDecodeError:
                 error_msg = {"type": "error", "message": "Invalid JSON format"}
                 await websocket.send_text(json.dumps(error_msg))
+            except WebSocketDisconnect as e:
+                raise e
             except Exception as e:
                 logger.error(f"Error processing WebSocket message: {e}")
                 error_msg = {"type": "error", "message": "Failed to process message"}
@@ -250,11 +261,16 @@ async def websocket_chat_endpoint(websocket: WebSocket, user_id: str, room: str 
     except Exception as e:
         logger.error(f"WebSocket error for user id {user_id}: {e}")
     finally:
+        logger.info(f"User id {user_id}: active_websockets " + str(active_websockets))
+        logger.info(f"User id {user_id}: user_rooms " + str(user_rooms))
         # Cleanup
         if user_id in active_websockets:
-            active_websockets[user_id] = None
+            # await active_websockets[user_id].close()
+            del active_websockets[user_id]
         if user_id in user_rooms:
-            user_rooms[user_id] = None
+            del user_rooms[user_id]
+        logger.info(f"AFTER User id {user_id}: active_websockets " + str(active_websockets))
+        logger.info(f"AFTER User id {user_id}: user_rooms " + str(user_rooms))
         
         logger.info(f"Cleaned up WebSocket connection: for user id {user_id}")
 
