@@ -34,7 +34,6 @@ function App() {
     axios.post(`${config.API_URL}/send_message`, {
       user_id: userId,
       message: message,
-      room: room,
     })
       .then(res => {
         console.log(res);

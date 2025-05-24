@@ -35,13 +35,13 @@ class ChatMessage(BaseModel):
 class SendMessageRequest(BaseModel):
     user_id: str
     message: str
-    room: str = "general"
 
 # Global variables
 rabbitmq_connection = None
 rabbitmq_channel = None
-active_websockets: Dict[str, WebSocket] = {}
+active_websockets: Dict[str, WebSocket] = {} # user_id -> WebSocket connection
 user_rooms: Dict[str, str] = {}  # user_id -> room
+user_consumers: Dict[str, Dict] = {}  # user_id -> consumer info (queue, consumer_tag)
 
 # RabbitMQ configuration
 RABBITMQ_URL = "amqp://guest:guest@localhost:5672/"
@@ -112,6 +112,15 @@ async def publish_message(message: ChatMessage):
 async def setup_message_consumer(room: str, user_id: str):
     """Set up message consumer for a specific room"""
     try:
+        # Clean up old queue
+        consumer_info = user_consumers.get(user_id)
+        if consumer_info:
+            logger.info(f"Cleaning up old consumer for user {user_id} in room {room}")
+            # if "queue" in consumer_info and not consumer_info["queue"].is_closed:
+            #     await consumer_info["queue"].unbind(CHAT_EXCHANGE, routing_key=f"chat.{consumer_info['room']}")
+            await consumer_info["queue"].cancel(consumer_info["consumer_tag"])
+            del user_consumers[user_id]
+
         # Declare queue for the room
         queue = await rabbitmq_channel.declare_queue(
             name="", 
@@ -126,8 +135,7 @@ async def setup_message_consumer(room: str, user_id: str):
         async def message_handler(message: aio_pika.IncomingMessage):
             async with message.process():
                 try:
-                    print(f"Received message in rabbitmq: ${message.body.decode()}")
-                    logger.info(f"Received message in rabbitmq: ${message.body.decode()}")
+                    logger.info(f"Received message in rabbitmq: message: ${message.body.decode()}, room: {room}, user_id: {user_id}")
                     # Parse message
                     message_data = json.loads(message.body.decode())
                     
@@ -141,7 +149,11 @@ async def setup_message_consumer(room: str, user_id: str):
                     logger.error(f"Error processing message: {e}")
         
         # Start consuming messages
-        await queue.consume(message_handler)
+        consumer_tag = await queue.consume(message_handler)
+        user_consumers[user_id] = {
+            "queue": queue,
+            "consumer_tag": consumer_tag
+        }
         logger.info(f"Started consuming messages for room {room}")
         
     except Exception as e:
@@ -162,11 +174,13 @@ async def send_message(request: SendMessageRequest):
     try:
         if request.user_id not in active_websockets:
             raise HTTPException(status_code=403, detail="Invalid user ID. Provide authenticated user id.")
+        if (request.user_id not in user_rooms):
+            raise HTTPException(status_code=400, detail="User has not entered any room.")
 
         chat_message = ChatMessage(
             user_id=request.user_id,
             message=request.message,
-            room=request.room,
+            room=user_rooms[request.user_id],
             timestamp=datetime.now().isoformat()
         )
         
@@ -233,7 +247,8 @@ async def websocket_chat_endpoint(websocket: WebSocket, user_id: str, room: str 
                 chat_message = ChatMessage(
                     user_id=user_id,
                     message=message_data.get("message", ""),
-                    room=message_data.get("room", room),
+                    room=room,
+                    # message_data.get("room", room),
                     timestamp=datetime.now().isoformat()
                 )
                 
