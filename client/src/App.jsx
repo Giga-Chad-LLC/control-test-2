@@ -1,34 +1,60 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import reactLogo from './assets/react.svg'
 import viteLogo from '/vite.svg'
 import './App.css'
+import config from './config/config';
+import axios from 'axios';
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [message, setMessage] = useState('');
+  const [messages, setMessages] = useState([]);
+  const [connectionId, setConnectionId] = useState(null);
+
+  const sendMessage = () => {
+    console.log("Sending message", message);
+    setMessage('');
+  };
+
+  const connect = () => {
+    // const ws = new WebSocket(`ws://localhost:8000/chat/${connectionId}`);
+    // ws.onmessage = (event) => {
+    //   setMessages([...messages, JSON.parse(event.data)]);
+    // };
+
+    axios.get(`${config.API_URL}/connect`)
+      .then((res) => {
+        console.log(res.data);
+        setConnectionId(res.data.connection_id);
+      });
+
+  };
+
+  // get connection id
+  useEffect(() => connect(), []);
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <div className="app-container">
+      <div className="chat-container">
+        <h1>RabbitMQ Chat</h1>
+        <div className="chat-buttons">
+
+          {(connectionId == null) ? (<button onClick={connect}>Connect</button>) : null}
+
+          <input type="text" placeholder="Message" value={message} onChange={(e) => setMessage(e.target.value)} />
+          <button onClick={sendMessage}>Send</button>
+        </div>
+        <div>
+          <h2 className="messages-title">Messages</h2>
+          <div className="messages-container">
+            { messages.length == 0 ? (<div className="messages-empty">No messages yet</div>) : null }
+
+            {messages.map((message) => (
+              <div className="message-block" key={message.id}>{message.content}</div>
+            ))}
+          </div>
+        </div>
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    </div>
   )
 }
 
