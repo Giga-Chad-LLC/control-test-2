@@ -215,7 +215,7 @@ async def websocket_chat_endpoint(websocket: WebSocket, user_id: str, room: str 
             return
 
         room = websocket.query_params.get("room", "general")
-        if len(room) == 0:
+        if len(room) == 0 or room is None:
             room = "general"
         
         active_websockets[user_id] = websocket
@@ -248,7 +248,6 @@ async def websocket_chat_endpoint(websocket: WebSocket, user_id: str, room: str 
                     user_id=user_id,
                     message=message_data.get("message", ""),
                     room=room,
-                    # message_data.get("room", room),
                     timestamp=datetime.now().isoformat()
                 )
                 
