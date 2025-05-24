@@ -171,6 +171,8 @@ async def send_message(request: SendMessageRequest):
 async def websocket_chat_endpoint(websocket: WebSocket, user_id: str, room: str = "general"):
     """WebSocket endpoint for real-time chat"""
     websocket_id = str(uuid.uuid4())
+
+    room = websocket.query_params.get("room", "general")
     
     await websocket.accept()
     active_websockets[websocket_id] = websocket
